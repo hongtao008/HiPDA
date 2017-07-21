@@ -85,6 +85,7 @@ extension HiPDA {
         /// - Parameter index: 帖子所在的下标
         func deleteThread(at index: Int) {
             threads.remove(at: index)
+            threadModels.remove(at: index)
         }
         
         /// 获取第一页帖子列表
@@ -129,6 +130,9 @@ extension HiPDA {
                         if page == 1 {
                             newThreads = threads
                         } else {
+                            var threads = threads
+                            let tidSet = Set(newThreads.map { $0.id })
+                            threads = threads.filter { !tidSet.contains($0.id) }
                             newThreads.reserveCapacity(newThreads.count + threads.count)
                             newThreads.append(contentsOf: threads)
                         }
@@ -158,7 +162,7 @@ extension HiPDA {
             let userBlockSet = Set(Settings.shared.userBlockList)
             var totalPage = self.totalPage
             return Observable.create { observer in
-                HiPDAProvider.request(.threads(fid: fid, typeid: typeid, page: page))
+                HiPDAProvider.request(.threads(fid: fid, typeid: typeid, page: page, order: Settings.shared.threadOrder))
                     .observeOn(ConcurrentDispatchQueueScheduler(qos: .userInteractive))
                     .mapGBKString()
                     .do(onNext: { htmlString in

@@ -16,13 +16,10 @@ import SDWebImage
 import Then
 
 /// 浏览帖子页面
-class PostViewController: BaseViewController {
-    fileprivate static let shared = PostViewController.load(from: .home)
-    
+class PostViewController: BaseViewController {    
     var postInfo: PostInfo! {
         didSet {
-            guard let viewModel = viewModel else { return }
-            viewModel.postInfo = postInfo
+            viewModel?.postInfo = postInfo
         }
     }
     
@@ -102,6 +99,10 @@ class PostViewController: BaseViewController {
         
         postOperationViewController?.dismiss(animation: false)
         postOperationViewController = nil
+    }
+    
+    deinit {
+        webView?.scrollView.delegate = nil
     }
     
     func canJump(to postInfo: PostInfo) -> Bool {
@@ -256,6 +257,9 @@ extension PostViewController {
         }
         let vc = NewThreadViewController.load(from: .home)
         vc.type = .replyPost(fid: fid, tid: viewModel.postInfo.tid)
+        vc.sendPostCompletion = { [unowned self] html in
+            self.handlePostSendCompletion(html)
+        }
         let navi = UINavigationController(rootViewController: vc)
         navi.transitioningDelegate = self
         present(navi, animated: true, completion: nil)
@@ -281,6 +285,15 @@ extension PostViewController {
             self.loadData()
         }
         present(pageNumberVC, animated: true, completion: nil)
+    }
+    
+    fileprivate func handlePostSendCompletion(_ html: String) {
+        viewModel.handlePostSendCompletion(html) { [weak self] result in
+            self?.handleDataLoadResult(result)
+            delay(seconds: 0.5) {
+                self?.bridge.callHandler("scrollToBottom")
+            }
+        }
     }
 }
 
@@ -310,17 +323,19 @@ extension PostViewController: PostOperationDelegate {
         postOperationViewController = nil
         switch operation {
         case .collection:
-            showPromptInformation(of: .loading("正在加入收藏夹..."))
-            viewModel.addToFavorites { [unowned self] result in
+            viewModel.favoriteButtonPressed(doing: { [unowned self] info in
+                self.showPromptInformation(of: .loading(info))
+            }, completion: { [unowned self] result in
                 self.hidePromptInformation()
                 self.handleAddFavoriteAndAttentionResult(result)
-            }
+            })
         case .attention:
-            showPromptInformation(of: .loading("正在加入关注列表..."))
-            viewModel.addToAttentions { [unowned self] result in
-                self.hidePromptInformation()
-                self.handleAddFavoriteAndAttentionResult(result)
-            }
+            viewModel.attentionButtonPressed(doing: { [unowned self] info in
+                self.showPromptInformation(of: .loading(info))
+                }, completion: { [unowned self] result in
+                    self.hidePromptInformation()
+                    self.handleAddFavoriteAndAttentionResult(result)
+            })
         case .top:
             bridge.callHandler("scrollToTop")
         case .bottom:
@@ -431,6 +446,9 @@ extension PostViewController {
             }
             let vc = NewThreadViewController.load(from: .home)
             vc.type = .replyAuthor(fid: fid, tid: self.viewModel.postInfo.tid, pid: pid)
+            vc.sendPostCompletion = { [unowned self] html in
+                self.handlePostSendCompletion(html)
+            }
             let navi = UINavigationController(rootViewController: vc)
             navi.transitioningDelegate = self
             self.present(navi, animated: true, completion: nil)
@@ -442,6 +460,9 @@ extension PostViewController {
             }
             let vc = NewThreadViewController.load(from: .home)
             vc.type = .quote(fid: fid, tid: self.viewModel.postInfo.tid, pid: pid)
+            vc.sendPostCompletion = { [unowned self] html in
+                self.handlePostSendCompletion(html)
+            }
             let navi = UINavigationController(rootViewController: vc)
             navi.transitioningDelegate = self
             self.present(navi, animated: true, completion: nil)
@@ -625,6 +646,10 @@ extension PostViewController: UIScrollViewDelegate {
                 scrollView.contentOffset = CGPoint(x: 0, y: scrollView.contentOffset.y)
             }
         #endif
+    }
+    
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        scrollView.decelerationRate = UIScrollViewDecelerationRateNormal
     }
 }
 
