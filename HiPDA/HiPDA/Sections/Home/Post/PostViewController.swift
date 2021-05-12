@@ -292,6 +292,11 @@ extension PostViewController {
             self?.handleDataLoadResult(result)
             delay(seconds: 0.5) {
                 self?.bridge.callHandler("scrollToBottom")
+                self?.webView?.evaluateJavaScript("document.title") { [weak self] (title, _) in
+                    if title == nil {
+                        self?.webView?.reload()
+                    }
+                }
             }
         }
     }
@@ -489,7 +494,15 @@ extension PostViewController {
         if uid == Settings.shared.activeAccount?.uid {
             // FIXME: - 添加编辑功能
         }
-    
+        
+        let tipOff = UIAlertAction(title: "举报", style: .default) { [unowned self] _ in
+            let tipOffVC = TipOffViewController.load(from: .home)
+            tipOffVC.user = self.viewModel.userOfPid(pid) ?? User(name: "UID: \(uid)", uid: uid)
+            tipOffVC.modalPresentationStyle = .overCurrentContext
+            self.present(tipOffVC, animated: false, completion: nil)
+        }
+        actionSheet.addAction(tipOff)
+        
         actionSheet.addAction(UIAlertAction(title: "取消", style: .cancel, handler: nil))
         
         present(actionSheet, animated: true, completion: nil)
@@ -500,6 +513,13 @@ extension PostViewController {
     }
     
     fileprivate func imageLongPressed(url: String) {
+        // 不太懂，有时候会重复频繁的调用该函数
+        struct StaticVariables {
+            static var lastCallStamp = 0.0
+        }
+        guard Date().timeIntervalSince1970 - StaticVariables.lastCallStamp > 1.0 else { return }
+        StaticVariables.lastCallStamp = Date().timeIntervalSince1970
+        
         let actionSheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         let look = UIAlertAction(title: "查看", style: .default) { [weak self] _ in
             self?.showImageBrowser(clickedImageURL: url, imageURLs: [url])
@@ -683,6 +703,10 @@ extension PostViewController: WKNavigationDelegate {
                 showPromptInformation(of: .failure(error.localizedDescription))
             }
         #endif
+    }
+    
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webView.reload()
     }
 }
 
